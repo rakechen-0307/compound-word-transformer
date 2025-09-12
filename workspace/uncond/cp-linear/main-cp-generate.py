@@ -33,8 +33,8 @@ import saver
 # config
 ################################################################################
 
-MODE = 'train' 
-# MODE = 'inference' 
+# MODE = 'train' 
+MODE = 'inference' 
 
 ###--- data ---###
 path_data_root = '../../../dataset/representations/uncond/cp/ailab17k_from-scratch_cp'
@@ -51,15 +51,15 @@ gid = 0
 init_lr = 0.0001
 
 ###--- fine-tuning & inference config ---###
-# info_load_model = (
-#     # path to ckpt for loading
-#     '/volume/ai-music-wayne/aaai/from-scratch/cp-linear/exp_base_fs',
-#     # loss
-#     29                               
-# )
-info_load_model = None
+info_load_model = (
+    # path to ckpt for loading
+    './exp',
+    # loss
+    19                               
+)
+# info_load_model = None
 path_gendir = 'gen_midis'
-num_songs = 50
+num_songs = 5
 
 ################################################################################
 # File IO
