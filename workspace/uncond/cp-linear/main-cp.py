@@ -530,7 +530,6 @@ def train():
     # init
     net = TransformerModel(n_class)
     net.cuda()
-    net.train()
     n_parameters = network_paras(net)
     print('n_parameters: {:,}'.format(n_parameters))
     saver_agent.add_summary_msg(
@@ -549,23 +548,30 @@ def train():
     optimizer = optim.Adam(net.parameters(), lr=init_lr)
 
     # unpack
-    train_x = train_data['x']
-    train_y = train_data['y']
-    train_mask = train_data['mask']
-    num_batch = len(train_x) // batch_size
-    
-    print('     num_batch:', num_batch)
+    val_split = 0.1
+    train_x = train_data['x'][:int(len(train_data['x']) * (1 - val_split))]
+    train_y = train_data['y'][:int(len(train_data['y']) * (1 - val_split))]
+    train_mask = train_data['mask'][:int(len(train_data['mask']) * (1 - val_split))]
+    val_x = train_data['x'][int(len(train_data['x']) * (1 - val_split)):]
+    val_y = train_data['y'][int(len(train_data['y']) * (1 - val_split)):]
+    val_mask = train_data['mask'][int(len(train_data['mask']) * (1 - val_split)):]
+    num_train_batch = len(train_x) // batch_size
+    num_val_batch = len(val_x) // batch_size
+
+    print('     num_train_batch:', num_train_batch)
+    print('     num_val_batch:', num_val_batch)
     print('    train_x:', train_x.shape)
     print('    train_y:', train_y.shape)
     print('    train_mask:', train_mask.shape)
+    print('    val_x:', val_x.shape)
+    print('    val_y:', val_y.shape)
+    print('    val_mask:', val_mask.shape)
 
     # run
     start_time = time.time()
     for epoch in range(n_epoch):
-        acc_loss = 0
-        acc_losses = np.zeros(7)
-
-        for bidx in range(num_batch): # num_batch 
+        net.train()
+        for bidx in range(num_train_batch): # num_batch 
             saver_agent.global_step_increment()
 
             # index
@@ -595,20 +601,44 @@ def train():
 
             # print
             sys.stdout.write('{}/{} | Loss: {:06f} | {:04f}, {:04f}, {:04f}, {:04f}, {:04f}, {:04f}, {:04f}\r'.format(
-                bidx, num_batch, loss, losses[0], losses[1], losses[2], losses[3], losses[4], losses[5], losses[6]))
+                bidx, num_train_batch, loss, losses[0], losses[1], losses[2], losses[3], losses[4], losses[5], losses[6]))
             sys.stdout.flush()
-
-            # acc
-            acc_losses += np.array([l.item() for l in losses])
-            acc_loss += loss.item()
 
             # log
             saver_agent.add_summary('batch loss', loss.item())
         
+        # evaluate
+        net.eval()
+        acc_loss = 0
+        acc_losses = np.zeros(7)
+        with torch.no_grad():
+            for bidx in range(num_val_batch): # num_batch 
+                # index
+                bidx_st = batch_size * bidx
+                bidx_ed = batch_size * (bidx + 1)
+
+                # unpack batch data
+                batch_x = val_x[bidx_st:bidx_ed]
+                batch_y = val_y[bidx_st:bidx_ed]
+                batch_mask = val_mask[bidx_st:bidx_ed]
+
+                # to tensor
+                batch_x = torch.from_numpy(batch_x).long().cuda()
+                batch_y = torch.from_numpy(batch_y).long().cuda()
+                batch_mask = torch.from_numpy(batch_mask).float().cuda()
+
+                # run
+                losses = net.train_step(batch_x, batch_y, batch_mask)
+                loss = (losses[0] + losses[1] + losses[2] + losses[3] + losses[4] + losses[5] + losses[6]) / 7
+
+                acc_loss += loss.item()
+                for i in range(7):
+                    acc_losses[i] += losses[i].item()
+
         # epoch loss
         runtime = time.time() - start_time
-        epoch_loss = acc_loss / num_batch
-        acc_losses = acc_losses / num_batch
+        epoch_loss = acc_loss / num_val_batch
+        acc_losses = acc_losses / num_val_batch
         print('------------------------------------')
         print('epoch: {}/{} | Loss: {} | time: {}'.format(
             epoch, n_epoch, epoch_loss, str(datetime.timedelta(seconds=runtime))))
